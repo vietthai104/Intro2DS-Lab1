@@ -56,7 +56,7 @@ def check_paper_exists(base_id: str, rate_limit: float = 1.0):
             # không có version này nữa => dừng
             break
         except Exception as e:
-            logging.warning(f"❌ Error checking {vid}: {e}")
+            logging.warning(f"Error checking {vid}: {e}")
             time.sleep(2)
     return versions
 
@@ -68,22 +68,22 @@ def enumerate_ids_and_versions(start_id: int, end_id: int, year: int, month: int
     """
     all_papers = {}
     total = end_id - start_id + 1
-    logging.info(f"🔍 Checking {total} IDs from {year}-{month:02d}")
+    logging.info(f"Checking {total} IDs from {year}-{month:02d}")
 
     for base_id in tqdm.tqdm(id_range(start_id, end_id, year, month), total=total):
         versions = check_paper_exists(base_id, rate_limit)
         if versions:
             all_papers[base_id] = versions
-            logging.info(f"✅ Found {base_id}: {len(versions)} version(s)")
+            logging.info(f"Found {base_id}: {len(versions)} version(s)")
         else:
             logging.debug(f"Not found: {base_id}")
 
-    logging.info(f"🎯 Total found: {len(all_papers)} papers")
+    logging.info(f"Total found: {len(all_papers)} papers")
     return all_papers
 
 
 if __name__ == "__main__":
     # Test nhanh khi chạy file riêng
-    found = enumerate_ids_and_versions(824, 830, 2025, 10, rate_limit=1.0)
+    found = enumerate_ids_and_versions(1000, 1003, 2025, 10, rate_limit=1.0)
     for k, v in found.items():
         print(k, "=>", v)

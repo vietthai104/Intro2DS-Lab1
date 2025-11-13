@@ -1,32 +1,75 @@
 import argparse
+import logging
 from discovery import enumerate_ids_and_versions
 from downloader import download_all_versions
 from cleaner import strip_figures_and_images
-from metadata import write_metadata_json, write_bibtex
+from metadata import write_metadata_json
 from refs import fetch_and_write_references
-from utils import ensure_paper_folder
+from utils import ensure_paper_folder, log_failed_id
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S"
+)
 
 def id_range(start_id: int, end_id: int, year: int = 2025, month: int = 10):
     for i in range(start_id, end_id + 1):
         yield f"{year}{month:02d}-{i:05d}"  # ví dụ 202510-00824 → 202510-05823
 
-def run(range_from, range_to, out_root, rate_limit=1.0, workers=2):
-    for base_id in id_range(824, 5823, 2025, 10):
-        paper_dir = ensure_paper_folder(out_root, base_id)  # <out_root>/yyyymm-id/
-        versions = download_all_versions(base_id, paper_dir, rate_limit, workers)
-        for ver in versions:
-            strip_figures_and_images(paper_dir)  # áp dụng trên toàn bộ tex/
-        write_metadata_json(base_id, paper_dir, versions)
-        write_bibtex(base_id, paper_dir)
-        fetch_and_write_references(base_id, paper_dir, rate_limit=1.0)
+def run(range_from, range_to, out_root, year=2025, month=10, rate_limit=3.0):
+    """
+    Main crawler logic
+    range_from: starting ID number (e.g., 824)
+    range_to: ending ID number (e.g., 5823)
+    rate_limit: wait time in seconds between requests
+    """
+    failed_ids_file = "failed_ids.txt"
+    total = range_to - range_from + 1
+    logging.info(f" Starting crawl: {total} papers from {year}{month:02d}-{range_from:05d} to {year}{month:02d}-{range_to:05d}")
+    
+    success_count = 0
+    fail_count = 0
+    
+    for base_id in id_range(range_from, range_to, year, month):
+        logging.info(f" Processing: {base_id}")
+        try:
+            paper_dir = ensure_paper_folder(out_root, base_id)  # <out_root>/yyyymm-id/
+            
+            # Download all versions
+            versions = download_all_versions(base_id, paper_dir, rate_limit)
+            if not versions:
+                logging.warning(f" No versions found for {base_id}")
+                log_failed_id(failed_ids_file, base_id, "No versions found")
+                fail_count += 1
+                continue
+            
+            # Clean up figures and images
+            strip_figures_and_images(paper_dir)
+            
+            # Write metadata
+            write_metadata_json(base_id, paper_dir, versions)
+            
+            # Fetch references
+            fetch_and_write_references(base_id, paper_dir, rate_limit=rate_limit)
+            
+            success_count += 1
+            logging.info(f"Successfully processed {base_id} ({success_count}/{total})")
+            
+        except Exception as e:
+            logging.error(f" Failed to process {base_id}: {e}")
+            log_failed_id(failed_ids_file, base_id, str(e))
+            fail_count += 1
+    
+    logging.info(f"Completed! Success: {success_count}, Failed: {fail_count}")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--from", dest="start", required=True, help="e.g., 2310.10000")
-    ap.add_argument("--to",   dest="end",   required=True, help="e.g., 2310.10100")
-    ap.add_argument("--out",  dest="out",   default="OUTPUT")
-    ap.add_argument("--rps",  dest="rps",   type=float, default=1.0, help="requests per second (API)")
-    ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--from", dest="start", type=int, required=True, help="Starting ID number (e.g., 824)")
+    ap.add_argument("--to",   dest="end",   type=int, required=True, help="Ending ID number (e.g., 5823)")
+    ap.add_argument("--out",  dest="out",   default="OUTPUT", help="Output directory")
+    ap.add_argument("--wait", dest="wait",  type=float, default=3.0, help="Wait time in seconds between requests")
     args = ap.parse_args()
-    run(args.start, args.end, args.out, rate_limit=args.rps, workers=args.workers)
+    run(args.start, args.end, args.out, year=2025, month=10, 
+        rate_limit=args.wait)
