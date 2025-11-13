@@ -79,6 +79,9 @@ def fetch_and_write_references(base_id: str, paper_dir: str, rate_limit=1.0):
     """
     Fetch references from Semantic Scholar API and save to references.json
     base_id: format '202510-00824'
+    
+    Returns:
+        tuple: (reference_count, success) where success is True if API call succeeded
     """
     # Convert to API format (2510.00824)
     api_id = _convert_id_format(base_id)
@@ -88,6 +91,7 @@ def fetch_and_write_references(base_id: str, paper_dir: str, rate_limit=1.0):
     headers = {"x-api-key": API_KEY}
     
     refs = {}
+    api_success = False
     
     try:
         logging.info(f"  Fetching references from Semantic Scholar for {base_id}")
@@ -109,6 +113,7 @@ def fetch_and_write_references(base_id: str, paper_dir: str, rate_limit=1.0):
             r = requests.get(url, params=params, headers=headers, timeout=30)
         
         if r.ok:
+            api_success = True
             data = r.json()
             ref_list = data.get("references") or []
             logging.info(f"  Found {len(ref_list)} references")
@@ -141,3 +146,5 @@ def fetch_and_write_references(base_id: str, paper_dir: str, rate_limit=1.0):
         json.dump(refs, f, ensure_ascii=False, indent=2)
     
     logging.info(f"  Saved {len(refs)} references to references.json")
+    
+    return (len(refs), api_success)

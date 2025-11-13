@@ -1,6 +1,26 @@
 import os, tarfile, glob
 import logging
 
+def get_directory_size(path: str) -> int:
+    """Calculate total size of a directory in bytes."""
+    if not os.path.exists(path):
+        return 0
+    
+    total_size = 0
+    try:
+        for dirpath, dirnames, filenames in os.walk(path):
+            for filename in filenames:
+                filepath = os.path.join(dirpath, filename)
+                if not os.path.islink(filepath):
+                    try:
+                        total_size += os.path.getsize(filepath)
+                    except OSError:
+                        pass
+    except Exception as e:
+        logging.warning(f"Error calculating directory size for {path}: {e}")
+    
+    return total_size
+
 def _extract_all_tars(tex_dir):
     """Extract all .tar.gz files in the tex directory into version-specific subdirectories"""
     tar_files = glob.glob(os.path.join(tex_dir, "*.tar.gz"))
@@ -65,13 +85,24 @@ def strip_figures_and_images(paper_dir):
     Main function to clean a paper directory:
     1. Extract all tar.gz files
     2. Remove image files
+    
+    Returns:
+        tuple: (size_before, size_after) in bytes
     """
     tex_dir = os.path.join(paper_dir, "tex")
     
     if not os.path.exists(tex_dir):
         logging.warning(f"  tex/ directory not found in {paper_dir}")
-        return
+        return (0, 0)
+    
+    # Calculate size before cleaning
+    size_before = get_directory_size(tex_dir)
     
     logging.info(f"  Extracting and removing images")
     _extract_all_tars(tex_dir)
     _remove_images(tex_dir)
+    
+    # Calculate size after cleaning
+    size_after = get_directory_size(tex_dir)
+    
+    return (size_before, size_after)
